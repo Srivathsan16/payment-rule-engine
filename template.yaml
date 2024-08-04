@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Resources:
+  PaymentRuleEngineFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: io.quarkus.amazon.lambda.runtime.QuarkusStreamHandler::handleRequest
+      Runtime: java17
+      CodeUri: target/function.zip
+      MemorySize: 1024
+      Timeout: 15
+      Policies:
+        - AWSLambdaDynamoDBExecutionRole
+      Environment:
+        Variables:
+          TABLE_NAME: "PaymentRules"
+          AWS_REGION: "us-west-2"
+Outputs:
+  PaymentRuleEngineFunction:
+    Description: "Payment Rule Engine Lambda Function"
+    Value: !GetAtt PaymentRuleEngineFunction.Arn
