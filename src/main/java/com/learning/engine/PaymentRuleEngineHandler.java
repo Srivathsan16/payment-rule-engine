@@ -1,6 +1,5 @@
 package com.learning.engine;
 
-
 import com.amazonaws.services.lambda.runtime.Context;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -12,7 +11,6 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-
 
 import java.util.HashMap;
 import java.util.List;
@@ -33,9 +31,10 @@ public class PaymentRuleEngineHandler implements RequestHandler<Map<String, Obje
     public Map<String, Object> handleRequest(Map<String, Object> input, Context context) {
         LOG.info("input is : " + input);
         Map<String, Object> bodyMap = new HashMap<>();
+        Map<String, Object> response = new HashMap<>();
         try {
             // Log the entire input
-            LOG.info("input is : " +input);
+            LOG.info("input is : " + input);
 
             // Extract the body as a JSON string
             String bodyJson = (String) input.get("body");
@@ -45,43 +44,37 @@ public class PaymentRuleEngineHandler implements RequestHandler<Map<String, Obje
             bodyMap = mapper.readValue(bodyJson, Map.class);
             LOG.info("Converted body JSON to Map: " + bodyMap);
 
+            LOG.info("DynamoDB Client Config: " + dynamoDbClient.serviceName());
+
+            List<Map<String, String>> rules = getRulesFromDynamoDB();
+            Map<String, Object> result = new HashMap<>(bodyMap);
+            LOG.info("BodyMap is : " + bodyMap);
+
+            for (Map<String, String> rule : rules) {
+                if (evaluateRule(rule.get("Criteria"), bodyMap)) {
+                    executeAction(rule.get("Action"), result);
+                }
+            }
+
+            // Build the response
+            response.put("statusCode", 200);
+            response.put("body", mapper.writeValueAsString(result));
+            response.put("headers", generateCorsHeaders());
+
         } catch (Exception e) {
             LOG.error("Error handling request", e);
-            throw new RuntimeException("Error handling request", e);
+            response.put("statusCode", 500);
+            response.put("body", "{\"error\":\"Error handling request\"}");
+            response.put("headers", generateCorsHeaders());
         }
 
-
-        LOG.info("DynamoDB Client Config: " + dynamoDbClient.serviceName());
-
-        List<Map<String, String>> rules = getRulesFromDynamoDB();
-        Map<String, Object> result = new HashMap<>(bodyMap);
-        LOG.info("BodyMAp is : " + bodyMap);
-
-        for (Map<String, String> rule : rules) {
-            if (evaluateRule(rule.get("Criteria"), bodyMap)) {
-                executeAction(rule.get("Action"), result);
-            }
-        }
-
-        // Add CORS headers
-        Map<String, Object> headers = new HashMap<>();
-        headers.put("Access-Control-Allow-Origin", "*");
-        headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-        headers.put("Access-Control-Allow-Headers", "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token");
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("statusCode", 200);
-        response.put("headers", headers);
-        response.put("body", result);
-
-        System.out.println("Result: " + result);
         return response;
     }
 
     private List<Map<String, String>> getRulesFromDynamoDB() {
         LOG.info("Fetching rules from DynamoDB.... Start");
         ScanRequest scanRequest = ScanRequest.builder().tableName("PaymentRules").build();
-        LOG.info("Scan Request done...." +scanRequest.toString());
+        LOG.info("Scan Request done...." + scanRequest.toString());
 
         ScanResponse result = dynamoDbClient.scan(scanRequest);
         LOG.info("Scan Response done...." + result.items());
@@ -103,5 +96,11 @@ public class PaymentRuleEngineHandler implements RequestHandler<Map<String, Obje
         MVEL.eval(expression, result);
     }
 
-
+    private Map<String, String> generateCorsHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+        headers.put("Access-Control-Allow-Headers", "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token");
+        return headers;
+    }
 }
