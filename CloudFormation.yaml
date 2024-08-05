@@ -1,10 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: CloudFormation template to create a VPC with a public subnet for API Gateway and a private subnet for Lambda
-  #Route tables - Which connectio where it shpuld go
+Description: CloudFormation template to create a VPC with a public subnet for API Gateway and a private subnet for Lambda, including a DynamoDB table for payment rules.
 
-## Internet gateway - Public internet create and attach this via router table to vpc
-### VPC -Subnet -Internetgateway -Route table -Route -Subnet route table association
-# NatGatewayEIP same for getitng inot internet
 Resources:
   # Create VPC
   MyVPC:
@@ -17,7 +13,7 @@ Resources:
         - Key: Name
           Value: MyVPC
 
-  # Create Internet Gateway - Public internet
+  # Create Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -138,6 +134,91 @@ Resources:
         - Key: Name
           Value: PaymentRulesTable
 
+  # Create IAM Role for Lambda
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Scan
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt PaymentRulesTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+      Path: /
+
+  # Create Lambda Function
+  PaymentRuleEngineFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: PaymentRuleEngineFunction
+      Handler: io.quarkus.amazon.lambda.runtime.QuarkusStreamHandler::handleRequest
+      Runtime: java17
+      Code:
+        S3Bucket: paymenttestsriengine
+        S3Key: function.zip
+      Role: !GetAtt LambdaExecutionRole.Arn
+      MemorySize: 1024
+      Timeout: 15
+      Environment:
+        Variables:
+          TABLE_NAME: "PaymentRules"
+          MY_AWS_REGION: "eu-north-1"
+
+  # Create API Gateway
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: PaymentRulesApi
+      Description: API Gateway for Payment Rules Engine
+
+  ApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: rules
+      RestApiId: !Ref ApiGatewayRestApi
+
+  ApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref ApiGatewayResource
+      RestApiId: !Ref ApiGatewayRestApi
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PaymentRuleEngineFunction.Arn}/invocations
+
+  LambdaApiGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PaymentRuleEngineFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/POST/rules
+
 Outputs:
   VPCId:
     Description: The VPC Id
@@ -151,3 +232,6 @@ Outputs:
   PaymentRulesTableName:
     Description: The name of the DynamoDB table for payment rules
     Value: !Ref PaymentRulesTable
+  ApiEndpoint:
+    Description: API Gateway endpoint URL for Prod stage
+    Value: !Sub https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/prod/rules

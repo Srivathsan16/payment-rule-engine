@@ -1,6 +1,8 @@
 {
-  "customerType": "premium",
-  "amount": 8000,
-  "paymentMethod": "CreditCard",
-  "country": "NORWAY"
+  "body": {
+    "customerType": "premium",
+    "amount": 12000,
+    "paymentMethod": "CreditCard",
+    "country": "NORWAY"
+  }
 }
