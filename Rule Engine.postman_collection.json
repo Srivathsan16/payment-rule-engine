@@ -1,0 +1,42 @@
+{
+	"info": {
+		"_postman_id": "c5b58d5a-59c0-422a-a246-b2f9bcb99054",
+		"name": "Rule Engine",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "32861369"
+	},
+	"item": [
+		{
+			"name": "rule",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"customerType\": \"premium\",\n  \"amount\": 8000,\n  \"paymentMethod\": \"CreditCard\",\n  \"country\": \"NORWAY\"\n}\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://900wl5pim1.execute-api.eu-north-1.amazonaws.com/prod/rules",
+					"protocol": "https",
+					"host": [
+						"900wl5pim1",
+						"execute-api",
+						"eu-north-1",
+						"amazonaws",
+						"com"
+					],
+					"path": [
+						"prod",
+						"rules"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
